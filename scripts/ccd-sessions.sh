@@ -225,7 +225,7 @@ emit_title_map() {
 }
 
 cmd_title_map() {
-  local header='RENAME MAP (session id <TAB> original title) — replay through the session-renaming tool:'
+  local header='RENAME MAP — restored sessions arrive unnamed. Original name of each, by session id:'
 
   # No ids given: fall back to a scope sweep.
   case "${1:-}" in
@@ -318,7 +318,7 @@ cmd_import_all() {
 
   # The tabs are open but carry app-derived names. Hand back the old ones so the
   # restore is finished rather than merely started.
-  printf '\nRENAME MAP (session id <TAB> original title) — replay through the session-renaming tool:\n\n'
+  printf '\nRENAME MAP — restored sessions arrive unnamed. Original name of each, by session id:\n\n'
   printf '%s\n' "$missing" | head -n "$n" | while IFS=$'\t' read -r cli when state title; do
     emit_title_map "$cli" "$title"
   done

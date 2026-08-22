@@ -1,6 +1,6 @@
 ---
 name: resume-backedup-desktop
-description: Use after switching Anthropic accounts in Claude Desktop, or whenever a session that used to exist is missing from the app. Recovers it into the current account. Triggers on "restore my sessions", "khôi phục session", "session cũ đâu rồi", "mất session sau khi đổi account", "session không hiện trong app", "bring back my old sessions", "resume a Claude Desktop session", "open session in Desktop", "import sessions from my other account". Works without signing back into the old account.
+description: Use after switching Anthropic accounts in Claude Desktop, or whenever a session that used to exist is missing from the app. Recovers it into the current account. Triggers on "restore my sessions", "khôi phục session", "session cũ đâu rồi", "mất session sau khi đổi account", "session không hiện trong app", "bring back my old sessions", "resume a Claude Desktop session", "open session in Desktop", "import sessions from my other account", and on restored sessions turning up nameless — "session mất tên sau khi import", "đặt lại tên session cũ", "restored sessions have no name", "rename imported sessions", "tabs are all untitled". Works without signing back into the old account.
 ---
 
 # Restore a Claude Desktop session
@@ -72,22 +72,25 @@ Either way it finds what is not currently visible under the signed-in account, p
 
 Do not pass `--yes` unless the user explicitly asked for an unattended bulk restore.
 
-### 4. Put the names back
+### 4. Finish the restore: put the names back
 
-A restored session arrives with **no name at all**, and holds none until it next runs a turn — at which point the app invents one of its own. Either way the name the user knew it by is gone. This cannot be folded into the restore: the link that carries a session into the app carries the identifier and nothing else, so the old name has to be reapplied afterwards.
+A restored session arrives with **no name at all** — the link that carries it into the app carries the identifier and nothing else. So `desktop` and `import-all` both end by printing a **rename map**, one line per session pairing its id with the name it had.
 
-Treat it as part of the restore rather than optional polish. Someone looking at twenty tabs they do not recognise has not really got their work back, and on a bulk restore the renaming is what makes the batch usable at all.
+The restore is complete only when both halves are done:
 
-Both `desktop` and `import-all` end with a rename map — one line per session, its id and its original title. Ask for the same map at any time:
+| Half | Done when |
+|---|---|
+| Tabs open | every session in the batch shows up in the app |
+| Names back | every line of the rename map has been applied with the session-renaming tool |
+
+Reprint the map at any time:
 
 ```bash
 ~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh title-map --active
 ~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh title-map <id> [<id>...]
 ```
 
-Rename each restored session with the session-renaming tool, taking the id and the title from the map exactly as printed. Sessions that never carried a title are left out of it — there is nothing to put back, and inventing a name is worse than leaving the app's guess.
-
-Wait until the tabs have actually appeared. A rename aimed at a session the app has not finished importing does not stick, and on a large batch the last tabs land several seconds behind the command.
+Take each id and title exactly as printed. Sessions that never carried a name are absent from the map — there is nothing to put back, and inventing one is worse than leaving the app's guess.
 
 ## Choosing between the two targets
 
