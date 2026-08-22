@@ -72,6 +72,23 @@ Either way it finds what is not currently visible under the signed-in account, p
 
 Do not pass `--yes` unless the user explicitly asked for an unattended bulk restore.
 
+### 4. Put the names back
+
+A restored session arrives with **no name at all**, and holds none until it next runs a turn — at which point the app invents one of its own. Either way the name the user knew it by is gone. This cannot be folded into the restore: the link that carries a session into the app carries the identifier and nothing else, so the old name has to be reapplied afterwards.
+
+Treat it as part of the restore rather than optional polish. Someone looking at twenty tabs they do not recognise has not really got their work back, and on a bulk restore the renaming is what makes the batch usable at all.
+
+Both `desktop` and `import-all` end with a rename map — one line per session, its id and its original title. Ask for the same map at any time:
+
+```bash
+~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh title-map --active
+~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh title-map <id> [<id>...]
+```
+
+Rename each restored session with the session-renaming tool, taking the id and the title from the map exactly as printed. Sessions that never carried a title are left out of it — there is nothing to put back, and inventing a name is worse than leaving the app's guess.
+
+Wait until the tabs have actually appeared. A rename aimed at a session the app has not finished importing does not stick, and on a large batch the last tabs land several seconds behind the command.
+
 ## Choosing between the two targets
 
 | | `desktop` | `resume` |
@@ -86,6 +103,7 @@ Do not pass `--yes` unless the user explicitly asked for an unattended bulk rest
 - **The listing shows no usable identifier** — the session was created but never actually ran, so there is no conversation to restore.
 - **`resume` reports the working directory is gone** — the git worktree was deleted. Use `desktop`, which does not need it.
 - **Nothing matches the id** — almost always an identifier typed out of the interface by hand. Run `list` and match on the title instead.
+- **It came back unnamed, or under a name nobody recognises** — expected, not a failure; the conversation itself is intact. Finish step 4.
 
 ## Do not
 

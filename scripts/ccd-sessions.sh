@@ -16,12 +16,20 @@
 # or --all (archived ones too). Archived sessions are still fully restorable; they are
 # just ones the user has already put away, so they are excluded unless asked for.
 #
+# Titles: a restore opens claude://resume?session=<uuid>, and that link carries nothing but the
+# id — so a restored session arrives with no name at all, and only picks up an app-invented one
+# once it runs a turn. Either way the old name is gone. Every restore path here prints a rename map
+# ("local_<cliSessionId> <TAB> original title") to be replayed through the session-renaming tool
+# once the tabs are open. See title-map for the same output on demand.
+#
 # Usage:
 #   ccd-sessions.sh list [--active|--all]        # every session on this Mac, all accounts
 #   ccd-sessions.sh backup [--active|--all]      # snapshot + emit a resume-*.sh helper
 #   ccd-sessions.sh desktop <id>                 # restore the session into the Desktop app
 #   ccd-sessions.sh import-all [--active|--all] [--limit N] [--yes]
 #                                                # restore what is not visible under this account
+#   ccd-sessions.sh title-map [--active|--all]   # rename map for every session in scope
+#   ccd-sessions.sh title-map <id> [<id>...]     # ...or just these ones
 #   ccd-sessions.sh resume <id>                  # reopen it in the terminal instead
 #   ccd-sessions.sh resume <id> --fork           # ...as a new session, if the app still has it open
 
@@ -202,6 +210,45 @@ cmd_desktop() {
 
   printf 'Opening in Claude Desktop: %s\n' "$title"
   open "claude://resume?session=$cli"
+  emit_title_map "$cli" "$title"
+}
+
+# A session imported through the deep link is always keyed local_<cliSessionId> in the app,
+# whatever local id it had under the old account — so the rename target is derivable, no
+# second lookup needed. Untitled sessions are skipped: there is no old name to put back.
+emit_title_map() {
+  local cli="$1" title="$2"
+  [ -z "$cli" ] && return 0
+  [ "$title" = "(untitled)" ] && return 0
+  [ -z "$title" ] && return 0
+  printf 'local_%s\t%s\n' "$cli" "$title"
+}
+
+cmd_title_map() {
+  local header='RENAME MAP (session id <TAB> original title) — replay through the session-renaming tool:'
+
+  # No ids given: fall back to a scope sweep.
+  case "${1:-}" in
+    ""|--active|--all)
+      local scope; scope="$(parse_scope "$@")"
+      printf '%s\n\n' "$header"
+      # One session can hold a record under several accounts, each with its own idea of the
+      # title. Rows arrive newest first, so keeping the first sighting keeps the freshest name.
+      scoped_tsv "$scope" | while IFS=$'\t' read -r cli local state when branch cwd title; do
+        emit_title_map "$cli" "$title"
+      done | awk -F'\t' '!seen[$1]++'
+      return 0
+      ;;
+  esac
+
+  printf '%s\n\n' "$header"
+  local want line cli title
+  for want in "$@"; do
+    line="$(find_row "$want")"
+    cli="$(printf '%s' "$line" | cut -f1)"
+    title="$(printf '%s' "$line" | cut -f7)"
+    emit_title_map "$cli" "$title"
+  done
 }
 
 # Every session whose cliSessionId has no index record under the signed-in account.
@@ -268,6 +315,13 @@ cmd_import_all() {
     sleep 1   # let the app settle; rapid bursts get dropped
   done
   echo "Done."
+
+  # The tabs are open but carry app-derived names. Hand back the old ones so the
+  # restore is finished rather than merely started.
+  printf '\nRENAME MAP (session id <TAB> original title) — replay through the session-renaming tool:\n\n'
+  printf '%s\n' "$missing" | head -n "$n" | while IFS=$'\t' read -r cli when state title; do
+    emit_title_map "$cli" "$title"
+  done
 }
 
 case "${1:-list}" in
@@ -276,5 +330,6 @@ case "${1:-list}" in
   resume)     shift; cmd_resume "$@" ;;
   desktop)    shift; cmd_desktop "$@" ;;
   import-all) shift; cmd_import_all "$@" ;;
-  *)          die "unknown command: $1  (list | backup | resume | desktop | import-all)" ;;
+  title-map)  shift || true; cmd_title_map "$@" ;;
+  *)          die "unknown command: $1  (list | backup | resume | desktop | import-all | title-map)" ;;
 esac

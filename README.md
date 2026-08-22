@@ -52,10 +52,20 @@ ccd-sessions.sh backup [--active|--all]         # snapshot to ~/.claude/session-
 ccd-sessions.sh desktop <id>                    # restore one session into the Desktop app
 ccd-sessions.sh import-all [--active|--all] [--limit N] [--yes]
                                                 # restore everything hidden from this account
+ccd-sessions.sh title-map [--active|--all]      # rename map: session id -> its original name
+ccd-sessions.sh title-map <id> [<id>...]        # ...or just these ones
 ccd-sessions.sh resume <id> [--fork]            # reopen in the terminal instead
 ```
 
 `<id>` accepts whichever identifier form you have; the script does the matching.
+
+## Names do not survive a restore
+
+The link that carries a session into the app carries its identifier and nothing else. A restored session therefore arrives **unnamed**, and stays that way until it next runs a turn — at which point the app invents a name of its own. Either way, the name you knew it by is gone, and after a bulk restore that leaves a window full of tabs you cannot tell apart.
+
+So `desktop` and `import-all` both end by printing a rename map — one line per session, its id beside its original name. Hand that to Claude and ask it to put the names back; it renames each session through its own session-renaming tool. `title-map` prints the same thing on demand.
+
+Sessions that never had a name are left out of the map: there is nothing to put back.
 
 ## Typical account switch
 
@@ -63,6 +73,7 @@ ccd-sessions.sh resume <id> [--fork]            # reopen in the terminal instead
 ccd-sessions.sh backup --all      # snapshot first
 # sign out, sign in as the other account
 ccd-sessions.sh import-all --active --limit 10
+# then ask Claude to replay the rename map it just printed
 ```
 
 Nothing needs to be copied for a same-machine switch. For a new Mac, carry both `~/.claude/projects/` (the conversations) and `~/.claude/session-backups/` (the snapshot).
