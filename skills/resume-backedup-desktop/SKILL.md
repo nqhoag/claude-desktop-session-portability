@@ -1,114 +1,63 @@
 ---
 name: resume-backedup-desktop
-description: Use after switching Anthropic accounts in Claude Desktop, or whenever a session that used to exist is missing from the app. Recovers it into the current account. Triggers on "restore my sessions", "khôi phục session", "session cũ đâu rồi", "mất session sau khi đổi account", "session không hiện trong app", "bring back my old sessions", "resume a Claude Desktop session", "open session in Desktop", "import sessions from my other account", and on restored sessions turning up nameless — "session mất tên sau khi import", "đặt lại tên session cũ", "restored sessions have no name", "rename imported sessions", "tabs are all untitled". Works without signing back into the old account.
+description: Use after switching Anthropic accounts in Claude Desktop, or whenever a session that used to exist is missing from the app. Triggers on "restore my sessions", "khôi phục session", "mất session sau khi đổi account", "session không hiện trong app", "bring back my old sessions", "open session in Desktop", "import sessions from my other account", and on restored sessions turning up nameless — "session mất tên sau khi import", "đặt lại tên session cũ", "restored sessions have no name", "rename imported sessions".
 ---
 
 # Restore a Claude Desktop session
 
-Bring a session back into the Claude Desktop app — including one belonging to a different Anthropic account — or reopen it in the terminal.
+An account switch deletes nothing — the app lists only the signed-in account's sessions, so the rest look lost. Restoring needs no sign-in to the old account and takes nothing from it. Requires Claude Desktop **1.1.9669+**.
 
-## The problem
+## 1. Find it
 
-An account switch never deletes sessions. The app simply lists the ones belonging to whoever is signed in, so everything else disappears from view and looks lost.
-
-Restoring does not require signing back into the old account, and does not take anything away from it. The session becomes visible under the account in use now, and stays available to the other one.
-
-Requires Claude Desktop **1.1.9669 or newer**; the script checks and refuses otherwise.
-
-## Steps
-
-### 1. Find the session
-
-Ask whether to look at active sessions only or all of them including archived, unless the user already said. Something missing from the app may simply have been archived, so a search that skips archived sessions can come back empty and look like real loss.
+Ask first: active only, or all including archived? "Missing" usually means archived, so an active-only search can look like real loss.
 
 ```bash
-~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh list --active
-~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh list --all
+~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh list --active   # or --all
 ```
 
-Every session on the machine, every account, newest first, with state, branch, working directory and title. A `sessions-*.tsv` snapshot under `~/.claude/session-backups/` works as a source too.
+Match with the user on title and timestamp, not identifiers — a session has several, and the one shown in the interface often will not resolve. Pass whatever id the listing prints.
 
-Match on the title and timestamp with the user rather than on identifiers — a session has more than one, they do not stay in sync, and the one shown in the interface often will not resolve. Feed the script whatever identifier the listing gives you; it does the matching itself.
-
-### 2. Restore it
-
-Into the Claude Desktop app — the default, and the right answer when the complaint is "my session disappeared":
+## 2. Restore it
 
 ```bash
-~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh desktop <id>
+~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh desktop <id>   # into the app as a tab — the usual answer
+~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh resume <id>    # into the terminal; add --fork if also open in the app
 ```
 
-It appears as a tab under the current account.
+`resume` needs the original working directory to still exist; `desktop` does not.
 
-Or into the terminal instead, when the user wants to keep working headless:
+## 3. Many at once
 
-```bash
-~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh resume <id>
-```
-
-This changes into the session's original working directory first. If the session is still open in the app, add `--fork` to branch a new one rather than contend with the live copy.
-
-### 3. Restoring many at once
-
-Ask about scope here too, and be concrete about the cost — restoring archived sessions puts things the user deliberately filed away back in front of them.
-
-| Scope | Restores | Pick it when |
-|---|---|---|
-| Active | Only sessions still in play | Just switched accounts and wants their current work back |
-| All | Archived ones too | Machine move, or genuinely wants everything visible again |
-
-```bash
-~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh import-all --active
-~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh import-all --all
-```
-
-Either way it finds what is not currently visible under the signed-in account, prints the list with archived ones marked, and waits for confirmation.
-
-**Each session becomes a tab**, so on a machine with dozens hidden this floods the window. Show the user the candidate list and agree on a batch size first:
+Ask about scope — `--all` puts back sessions the user archived.
 
 ```bash
 ~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh import-all --active --limit 10
 ```
 
-Do not pass `--yes` unless the user explicitly asked for an unattended bulk restore.
+**Each session becomes a tab**, so dozens of hidden sessions flood the window — agree a batch size first. Do not pass `--yes` unless asked.
 
-### 4. Finish the restore: put the names back
+## 4. Put the names back
 
-A restored session arrives with **no name at all** — the link that carries it into the app carries the identifier and nothing else. So `desktop` and `import-all` both end by printing a **rename map**, one line per session pairing its id with the name it had.
+A restored session arrives with **no name at all** — the link that carries it into the app carries the identifier and nothing else. So `desktop` and `import-all` both end by printing a **rename map**: one line per session, its id beside the name it had.
 
 The restore is complete only when both halves are done:
 
 | Half | Done when |
 |---|---|
 | Tabs open | every session in the batch shows up in the app |
-| Names back | every line of the rename map has been applied with the session-renaming tool |
-
-Reprint the map at any time:
+| Names back | every rename-map line has been applied with the session-renaming tool |
 
 ```bash
-~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh title-map --active
-~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh title-map <id> [<id>...]
+~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh title-map --active   # reprint the map
 ```
 
-Take each id and title exactly as printed. Sessions that never carried a name are absent from the map — there is nothing to put back, and inventing one is worse than leaving the app's guess.
+Take each id and title exactly as printed. Sessions that never carried a name are absent — nothing to put back.
 
-## Choosing between the two targets
+## When it does not come back
 
-| | `desktop` | `resume` |
-|---|---|---|
-| Opens in | The app, as a tab | A terminal window |
-| Needs the original working directory to still exist | No | Yes |
-| Recovers a session from another account | Yes, and it shows up in the app | Yes, but stays in the terminal |
+- **Missing from step 1** — re-run with `--all`; archived is the usual reason.
+- **No usable identifier** — created but never ran; nothing to restore.
+- **Nothing matches the id** — one copied by hand from the interface. Match on title.
+- **Came back unnamed** — expected. Finish step 4.
 
-## When a session will not come back
-
-- **It never showed up in step 1** — re-run the listing with `--all` before concluding anything. Archived is the most common reason a session is "missing".
-- **The listing shows no usable identifier** — the session was created but never actually ran, so there is no conversation to restore.
-- **`resume` reports the working directory is gone** — the git worktree was deleted. Use `desktop`, which does not need it.
-- **Nothing matches the id** — almost always an identifier typed out of the interface by hand. Run `list` and match on the title instead.
-- **It came back unnamed, or under a name nobody recognises** — expected, not a failure; the conversation itself is intact. Finish step 4.
-
-## Do not
-
-- **Do not sign out of the current account to "free" the old sessions.** Restoring works from where you are; signing out just costs time.
-- **Do not hand-edit Claude Desktop's own files** to make a session reappear. Let the script do it — a malformed record is harder to recover from than a hidden session.
+Never sign out to "free" old sessions. Never hand-edit Claude Desktop's files — a malformed record is worse than a hidden session.
