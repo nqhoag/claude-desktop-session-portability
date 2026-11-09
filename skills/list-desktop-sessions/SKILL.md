@@ -25,8 +25,8 @@ The app lists the sessions of whoever is signed in. Anything belonging to anothe
 2. **Run it.**
 
    ```bash
-   ~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh list --active
-   ~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh list --all
+   bash ~/.claude/skills/switch-desktop-account/scripts/ccd-sessions.sh list --active
+   bash ~/.claude/skills/switch-desktop-account/scripts/ccd-sessions.sh list --all
    ```
 
    Each row gives the identifier, state, last activity, git branch, and title. The listing is sorted newest first.
@@ -35,15 +35,15 @@ The app lists the sessions of whoever is signed in. Anything belonging to anothe
 
    Call out anything notable:
 
-   - **Sessions spanning more than one account** — they have switched accounts before and have work currently hidden from the app. Point them at `resume-backedup-desktop`.
+   - **Sessions spanning more than one account** — they have switched accounts before and have work currently hidden from the app. Point them at `switch-desktop-account`.
    - **A large archived count** relative to active, when the user is about to switch accounts or machines — it changes what they should back up.
 
 ## Following on
 
 | The user then wants to | Skill |
 |---|---|
-| Snapshot this before switching account or machine | `backup-desktop-session` |
-| Open one of these, or bring back a hidden one | `resume-backedup-desktop` |
+| Snapshot this before switching account or machine | `switch-desktop-account` |
+| Open one of these, or bring back a hidden one | `switch-desktop-account` |
 
 ## Do not
 

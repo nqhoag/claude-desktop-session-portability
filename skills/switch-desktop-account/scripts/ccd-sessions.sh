@@ -26,7 +26,7 @@
 #   ccd-sessions.sh list [--active|--all]        # every session on this Mac, all accounts
 #   ccd-sessions.sh backup [--active|--all]      # snapshot + emit a resume-*.sh helper
 #   ccd-sessions.sh desktop <id>                 # restore the session into the Desktop app
-#   ccd-sessions.sh import-all [--active|--all] [--limit N] [--yes]
+#   ccd-sessions.sh import-all [--active|--all] [--since DAYS] [--limit N] [--yes]
 #                                                # restore what is not visible under this account
 #   ccd-sessions.sh title-map [--active|--all]   # rename map for every session in scope
 #   ccd-sessions.sh title-map <id> [<id>...]     # ...or just these ones
@@ -66,12 +66,13 @@ for root, _dirs, files in os.walk(store):
             iso = "?"
         rows.append((
             ts,
-            d.get("cliSessionId") or "",
-            d.get("sessionId") or "",
+            d.get("cliSessionId") or "-",
+            # "-" not "": bash `read` collapses empty tab-separated fields and shifts columns.
+            d.get("sessionId") or "-",
             "archived" if d.get("isArchived") else "active",
             iso,
             d.get("branch") or "-",
-            d.get("cwd") or "",
+            d.get("cwd") or "-",
             (d.get("title") or "(untitled)").replace("\t", " ").replace("\n", " "),
         ))
 
@@ -111,7 +112,7 @@ cmd_list() {
   printf '%s\n' "$(printf '%.0s-' {1..150})"
 
   scoped_tsv "$scope" | while IFS=$'\t' read -r cli local state when branch cwd title; do
-    printf '%-38s %-9s %-17s %-46s %s\n' "${cli:-<none>}" "$state" "$when" "${branch:0:46}" "${title:0:70}"
+    printf '%-38s %-9s %-17s %-46s %s\n' "$([ "$cli" = - ] && echo "<none>" || echo "$cli")" "$state" "$when" "${branch:0:46}" "${title:0:70}"
   done
 }
 
@@ -134,7 +135,7 @@ cmd_backup() {
     echo '# Each block is standalone: uncomment one and run it.'
     echo
     scoped_tsv "$scope" | while IFS=$'\t' read -r cli local state when branch cwd title; do
-      [ -z "$cli" ] && continue
+      [ "$cli" = "-" ] && continue
       printf '# %s  [%s]  %s%s\n' "$when" "$branch" "$title" "$([ "$state" = archived ] && echo '  (archived)')"
       printf '# (cd %q && claude --resume %s)\n\n' "$cwd" "$cli"
     done
@@ -164,7 +165,7 @@ cmd_resume() {
   cwd="$(printf '%s' "$line" | cut -f6)"
   title="$(printf '%s' "$line" | cut -f7)"
 
-  [ -n "$cli" ] || die "Session has no cliSessionId yet (never started?): $want"
+  [ "$cli" != "-" ] || die "Session has no cliSessionId yet (never started?): $want"
   [ -d "$cwd" ] || die "Working directory is gone (worktree deleted?): $cwd"
 
   printf 'Resuming: %s\n  cwd: %s\n\n' "$title" "$cwd"
@@ -206,7 +207,7 @@ cmd_desktop() {
   line="$(find_row "$want")"
   cli="$(printf '%s' "$line" | cut -f1)"
   title="$(printf '%s' "$line" | cut -f7)"
-  [ -n "$cli" ] || die "Session has no cliSessionId yet (never started?): $want"
+  [ "$cli" != "-" ] || die "Session has no cliSessionId yet (never started?): $want"
 
   printf 'Opening in Claude Desktop: %s\n' "$title"
   open "claude://resume?session=$cli"
@@ -218,7 +219,7 @@ cmd_desktop() {
 # second lookup needed. Untitled sessions are skipped: there is no old name to put back.
 emit_title_map() {
   local cli="$1" title="$2"
-  [ -z "$cli" ] && return 0
+  { [ -z "$cli" ] || [ "$cli" = "-" ]; } && return 0
   [ "$title" = "(untitled)" ] && return 0
   [ -z "$title" ] && return 0
   printf 'local_%s\t%s\n' "$cli" "$title"
@@ -266,11 +267,12 @@ current_account_dir() {
 }
 
 cmd_import_all() {
-  local limit=0 assume_yes=0 scope
+  local limit=0 assume_yes=0 since=0 scope
   scope="$(parse_scope "$@")"
   while [ $# -gt 0 ]; do
     case "$1" in
       --limit) limit="${2:-0}"; shift 2 ;;
+      --since) since="${2:-0}"; shift 2 ;;
       --yes|-y) assume_yes=1; shift ;;
       --active|--all) shift ;;
       *) die "unknown option: $1" ;;
@@ -282,11 +284,17 @@ cmd_import_all() {
   acct="$(current_account_dir)"
   printf 'Scope: %s\n' "$([ "$scope" = all ] && echo "all sessions, archived included" || echo "active sessions only")"
 
+  # --since N keeps sessions active in the last N days ("YYYY-MM-DD HH:MM" compares as text).
+  local cutoff=""
+  [ "$since" -gt 0 ] && cutoff="$(date -v-"${since}"d '+%Y-%m-%d %H:%M')"
+
+  # Rows arrive newest first. Dedupe without re-sorting, so --limit takes the most recent.
   missing="$(scoped_tsv "$scope" | while IFS=$'\t' read -r cli local state when branch cwd title; do
-    [ -z "$cli" ] && continue
+    [ "$cli" = "-" ] && continue
+    [ -n "$cutoff" ] && [[ "$when" < "$cutoff" ]] && continue
     grep -rqls "\"cliSessionId\": *\"$cli\"" "$acct" 2>/dev/null && continue
     printf '%s\t%s\t%s\t%s\n' "$cli" "$when" "$state" "$title"
-  done | sort -u -t$'\t' -k1,1)"
+  done | awk -F'\t' '!seen[$1]++')"
 
   if [ -z "$missing" ]; then
     printf 'Nothing to restore — every session in scope is already visible under this account.\n'

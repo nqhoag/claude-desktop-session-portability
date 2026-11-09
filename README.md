@@ -1,14 +1,18 @@
 # Claude Desktop session portability
 
-Three Claude Code skills that make Claude Desktop sessions survive an account switch.
+Two Claude Code skills that carry Claude Desktop sessions across an Anthropic account switch, with their worktree, sidebar group and pin.
 
 ## The problem
 
-Claude Desktop shows the sessions of the account you are signed in as. Sign in as a different one and the list looks empty — as if the work is gone.
+Claude Desktop shows only the signed-in account's sessions, groups and pins. Sign in as another account and the list looks empty.
 
-It is not. An account switch deletes nothing. But the app has no way to show you the other account's sessions, and the identifier it displays for a session is not reliably the one that can reopen it, so recovering by hand tends to fail and confirm the wrong conclusion.
+An account switch deletes nothing. Each session's transcript is one file shared by every account; each account keeps only a small record (about 15 KB) that points at it. These skills read every account's records, let you choose sessions, and bring them into the new account.
 
-These skills see every session on the machine regardless of account, snapshot them, and bring any of them back into whichever account you are using now — without signing back into the old one, and without taking anything away from it.
+A plain restore through the app's `claude://resume` link loses three things. These skills put them back:
+
+- **Worktree.** The rebuilt record forgets its worktree, and the app's worktree store still names the old account's session as the owner. The app then tries a fresh checkout of the same branch and fails with "This session's branch is checked out in another folder".
+- **Sidebar group and pin.** Both are stored per account, keyed by a session id that changes on restore.
+- **Archive state.** A restored session can arrive archived although the original was not.
 
 ## Install
 
@@ -18,73 +22,53 @@ cd claude-desktop-session-portability
 ./install.sh
 ```
 
-Installs into `~/.claude/skills/`, so the skills are available in every project. Remove with `./install.sh --uninstall`.
+Installs into `~/.claude/skills/` and removes the retired `backup-desktop-session` and `resume-backedup-desktop`. Remove with `./install.sh --uninstall`.
 
-macOS only. Restoring into the app requires Claude Desktop 1.1.9669 or newer.
+macOS only. Needs Claude Desktop 1.1.9669 or newer and `python3`.
 
 ## The skills
 
 | Skill | Use when |
 |---|---|
-| `list-desktop-sessions` | "What sessions do I have?" — across every account, active or including archived. |
-| `backup-desktop-session` | Before signing out, switching accounts, or moving to a new Mac. |
-| `resume-backedup-desktop` | After the switch, or any time a session is missing from the app. |
+| `switch-desktop-account` | Before or after switching accounts, moving to a new Mac, or when sessions, groups or pins are missing. |
+| `list-desktop-sessions` | "What sessions do I have?" across every account, active or including archived. |
 
-They trigger from ordinary phrasing — "back up my sessions before I switch accounts", "my old sessions disappeared", "list everything including archived" — in English or Vietnamese. No need to remember command names.
+They trigger from ordinary phrasing in English or Vietnamese.
 
-## Active or all?
+## The four steps
 
-Listing, backing up and restoring each take a scope, and the skills will ask before doing anything:
+| Step | Where | Who | What |
+|---|---|---|---|
+| 1 | Claude Desktop | the skill | choose sessions; `plan` writes the plan file |
+| 2 | Claude Desktop | you | sign out, sign in to the new account |
+| 3 | macOS Terminal.app | you run `apply` | restore each session, quit the app, repair worktrees, reopen it |
+| 4 | Claude Desktop, new account | the skill | rebuild groups and pins, unarchive |
 
-- **Active** — sessions still in play. The default, and right for routine use.
-- **All** — archived ones too. Right when moving machines, or auditing, or hunting for something old.
+`status` names the step you are on and the next action. The skill runs it before anything else, so no step runs twice or out of order. Already signed in to the new account? Step 1 then lists the hidden sessions, and step 2 is skipped.
 
-Archived sessions restore exactly as well as active ones. They are excluded by default only because the user already chose to put them away.
+`apply` must run in Terminal.app: it quits Claude Desktop, and a terminal inside the app would die with it. It refuses to start there. It is safe to re-run; finished parts are skipped, and the app is restarted only if a worktree still needs repair.
 
 ## Direct script use
 
-The skills drive one script, installed at
-`~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh`.
-
 ```bash
-ccd-sessions.sh list [--active|--all]           # every session on this Mac, all accounts
-ccd-sessions.sh backup [--active|--all]         # snapshot to ~/.claude/session-backups/
-ccd-sessions.sh desktop <id>                    # restore one session into the Desktop app
-ccd-sessions.sh import-all [--active|--all] [--limit N] [--yes]
-                                                # restore everything hidden from this account
-ccd-sessions.sh title-map [--active|--all]      # rename map: session id -> its original name
-ccd-sessions.sh title-map <id> [<id>...]        # ...or just these ones
-ccd-sessions.sh resume <id> [--fork]            # reopen in the terminal instead
+S=~/.claude/skills/switch-desktop-account/scripts
+python3 $S/repair-restored-sessions.py status                      # current step and next action
+python3 $S/repair-restored-sessions.py scan [--since DAYS] [--all] [--mine]
+python3 $S/repair-restored-sessions.py plan <cliSessionId>...     # step 1
+python3 $S/repair-restored-sessions.py apply                       # step 3, Terminal.app only
+python3 $S/repair-restored-sessions.py worktrees --dry-run         # what a repair would change
+bash $S/ccd-sessions.sh list [--active|--all]                      # every session, every account
+bash $S/ccd-sessions.sh backup [--active|--all]                    # snapshot to ~/.claude/session-backups/
 ```
 
-`<id>` accepts whichever identifier form you have; the script does the matching.
-
-## Names do not survive a restore
-
-The link that carries a session into the app carries its identifier and nothing else. A restored session therefore arrives **unnamed**, and stays that way until it next runs a turn — at which point the app invents a name of its own. Either way, the name you knew it by is gone, and after a bulk restore that leaves a window full of tabs you cannot tell apart.
-
-So `desktop` and `import-all` both end by printing a rename map — one line per session, its id beside its original name. Hand that to Claude and ask it to put the names back; it renames each session through its own session-renaming tool. `title-map` prints the same thing on demand.
-
-Sessions that never had a name are left out of the map: there is nothing to put back.
-
-## Typical account switch
-
-```bash
-ccd-sessions.sh backup --all      # snapshot first
-# sign out, sign in as the other account
-ccd-sessions.sh import-all --active --limit 10
-# then ask Claude to replay the rename map it just printed
-```
-
-Nothing needs to be copied for a same-machine switch. For a new Mac, carry both `~/.claude/projects/` (the conversations) and `~/.claude/session-backups/` (the snapshot).
+Same Mac: nothing to copy. New Mac: carry `~/.claude/projects/` (the transcripts) and `~/.claude/session-backups/`.
 
 ## Caveats
 
-- `import-all` opens one tab per session. Use `--limit`.
-- `resume` needs the session's original working directory to still exist; a deleted git worktree breaks it. `desktop` does not care.
-- A session that was created but never ran has nothing to restore.
-- This depends on Claude Desktop internals that are not a published interface, and could change in a future release. Verified against Claude Code 2.1.221 and Claude Desktop 1.34493.1.
-- Reads only your own local files, writes only to `~/.claude/session-backups/` and `~/.claude/skills/`. Nothing leaves the machine.
+- Not handled yet: switching back to an account that already has the sessions. Its sessions can hit the branch error above.
+- A worktree held by another session is left alone; that session runs in the repository folder.
+- Depends on Claude Desktop internals that are not a published interface. Records are written only while the app is quit, and every file changed is backed up under `~/.claude/session-backups/record-backup-<time>/`.
+- Reads only local files. Nothing leaves the machine.
 
 ## License
 

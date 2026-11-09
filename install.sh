@@ -5,20 +5,27 @@
 #   ./install.sh              # install / update
 #   ./install.sh --uninstall  # remove
 #
-# scripts/ccd-sessions.sh in this repo is the single source of truth; the installer
-# copies it into the backup skill, which is where every SKILL.md references it.
+# Each skill folder is copied whole; its scripts live inside it, so the paths in
+# SKILL.md resolve the same way in this repo and after install.
 
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS_DIR="$HOME/.claude/skills"
-SKILLS=(list-desktop-sessions backup-desktop-session resume-backedup-desktop)
+SKILLS=(list-desktop-sessions switch-desktop-account)
+# Replaced by switch-desktop-account; left installed, their triggers would compete with it.
+RETIRED=(backup-desktop-session resume-backedup-desktop)
 
-if [ "${1:-}" = "--uninstall" ]; then
-  for s in "${SKILLS[@]}"; do
+remove() {
+  for s in "$@"; do
+    [ -e "$SKILLS_DIR/$s" ] || continue
     rm -rf "${SKILLS_DIR:?}/$s"
     echo "removed $SKILLS_DIR/$s"
   done
+}
+
+if [ "${1:-}" = "--uninstall" ]; then
+  remove "${SKILLS[@]}" "${RETIRED[@]}"
   exit 0
 fi
 
@@ -28,21 +35,16 @@ case "$(uname -s)" in
 esac
 
 mkdir -p "$SKILLS_DIR"
+remove "${RETIRED[@]}"
 
 for s in "${SKILLS[@]}"; do
   src="$REPO_DIR/skills/$s"
   [ -d "$src" ] || { echo "missing skill source: $src" >&2; exit 1; }
-  mkdir -p "$SKILLS_DIR/$s"
-  cp "$src/SKILL.md" "$SKILLS_DIR/$s/SKILL.md"
-  echo "installed $SKILLS_DIR/$s/SKILL.md"
+  rm -rf "${SKILLS_DIR:?}/$s"
+  cp -R "$src" "$SKILLS_DIR/$s"
+  echo "installed $SKILLS_DIR/$s"
 done
 
-# Every skill invokes the script through the backup skill's path.
-mkdir -p "$SKILLS_DIR/backup-desktop-session/scripts"
-cp "$REPO_DIR/scripts/ccd-sessions.sh" "$SKILLS_DIR/backup-desktop-session/scripts/ccd-sessions.sh"
-chmod +x "$SKILLS_DIR/backup-desktop-session/scripts/ccd-sessions.sh"
-echo "installed $SKILLS_DIR/backup-desktop-session/scripts/ccd-sessions.sh"
-
 echo
-echo "Done. Try:"
-echo "  ~/.claude/skills/backup-desktop-session/scripts/ccd-sessions.sh list"
+echo "Done. In Claude Desktop, ask: \"switch my Claude Desktop account\". Or check where you are:"
+echo "  python3 ~/.claude/skills/switch-desktop-account/scripts/repair-restored-sessions.py status"
